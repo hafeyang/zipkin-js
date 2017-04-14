@@ -28,15 +28,16 @@ describe('mongodb instrumentation - should traced', () => {
     ctxImpl.letContext(ctx, () => {
       const url = 'mongodb://localhost:27017/zipkin_test';
       MongoClient.connect(url, function(err, db) {
-        const col = db.collection('somecollection');
         ctxImpl.letContext(ctx, () => {
-          col.deleteMany({}, {}, function() {
+          db.collection('somecollection').deleteMany({}, {}, function() {
             ctxImpl.letContext(ctx, () => {
-              col.insertMany([{a: 1}, {a: 2}, {a: 3}], function() {
+              db.collection('somecollection').insertMany([{a: 1}, {a: 2}, {a: 3}], function() {
                 db.close();
-                const annotations = record.args.map(args => args[0]);
-                annotations.forEach(a => console.log(a.traceId.traceId+" "+a.traceId.spanId+" "+a.traceId.parentId));
-                console.log(annotations);
+                const annotations = recorder.record.args.map(args => args[0]);
+                const firstAnn = annotations[0];
+                annotations.forEach(ann => {
+                  expect(ann.traceId.traceId).to.equal(firstAnn.traceId.traceId);
+                });
                 done();
               });
             });

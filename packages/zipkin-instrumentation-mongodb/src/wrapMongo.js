@@ -11,11 +11,11 @@ module.exports = (mongodb, {tracer, serviceName = 'mongo'}) => {
 
   function mkZipkinCallback(callback, id) {
     return function zipkinCallback(...args) {
-      tracer.scoped(() => {
+      return tracer.scoped(() => {
         tracer.setId(id);
         tracer.recordAnnotation(new Annotation.ClientRecv());
+        return callback.apply(this, args);
       });
-      callback.apply(this, args);
     };
   }
   [
@@ -66,11 +66,9 @@ module.exports = (mongodb, {tracer, serviceName = 'mongo'}) => {
     mongodb.Collection.prototype[method] = function(...args) {
       const callback = args.pop();
       const self = this;
-      let rememberId;
-      tracer.scoped((id) => {
+      return tracer.scoped(() => {
         const id = tracer.createChildId();
         tracer.setId(id);
-        rememberId = id;
         tracer.recordServiceName(serviceName);
         tracer.recordRpc(method);
         tracer.recordAnnotation(new Annotation.ClientSend());
@@ -79,10 +77,10 @@ module.exports = (mongodb, {tracer, serviceName = 'mongo'}) => {
         if (typeof (args[1]) !== 'function') {
           tracer.recordBinary('options.1', JSON.stringify(args[1]));
         }
+        const wrapper = mkZipkinCallback(callback, id);
+        const newArgs = [...args, wrapper];
+        return actualFn.apply(self, newArgs);
       });
-      const wrapper = mkZipkinCallback(callback, rememberId);
-      const newArgs = [...args, wrapper];
-      return actualFn.apply(self, newArgs);
     };
   });
   return mongodb;
